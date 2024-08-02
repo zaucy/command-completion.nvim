@@ -97,7 +97,15 @@ local function setup_handlers()
     -- Clear window
     n.buf_set_lines(M.wbufnr, 0, height, false, tbl)
 
-    local input = f.getcmdline()
+    local input = vim.trim(f.getcmdline())
+
+    -- NOTE: shell autcomplete is very slow
+    if vim.startswith(input, '!') or vim.startswith(input, '\'') then
+      n.win_close(M.winid, true)
+      M.winid = nil
+      return
+    end
+
     local completions = f.getcompletion(input, 'cmdline')
 
     -- TODO(smolck): No clue if this really helps much if at all but we'll use it

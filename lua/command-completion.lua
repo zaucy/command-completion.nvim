@@ -219,6 +219,59 @@ local function teardown_handlers()
   end
 end
 
+local function tab_completion(direction)
+  if vim.tbl_isempty(current_completions) then
+    current_selection = 1
+    return
+  end
+
+  if current_selection == -1 then
+    if direction > 0 then
+      current_selection = 1
+    else
+      current_selection = #current_completions
+    end
+  else
+    if direction > 0 then
+      current_selection = current_selection + direction > #current_completions and 1 or current_selection + direction
+    else
+      current_selection = current_selection + direction < 1 and #current_completions or current_selection + direction
+    end
+  end
+
+  n.buf_clear_namespace(M.wbufnr, search_hl_nsid, 0, -1)
+  vim.highlight.range(
+    M.wbufnr,
+    search_hl_nsid,
+    'Search',
+    current_completions[current_selection].start,
+    current_completions[current_selection].finish,
+    {}
+  )
+  vim.cmd('redraw')
+
+  -- TODO(smolck): Re-visit this when/if https://github.com/neovim/neovim/pull/18096 is merged.
+  local cmdline = f.getcmdline()
+  local last_word_len = vim.split(cmdline, ' ')
+  last_word_len = string.len(last_word_len[#last_word_len])
+
+  cmdline_changed_disabled = true
+  vim.api.nvim_input(('<BS>'):rep(last_word_len) .. current_completions[current_selection].full_completion)
+
+  -- This is necessary, from @gpanders on matrix:
+  --
+  -- """
+  -- what's probably happening is you are ignoring CmdlineChanged, running your function, and then removing it before the event loop has a chance to turn
+  -- so you should instead ignore the event, run your callback, let the event loop turn, and then remove it
+  -- which is what vim.schedule is for
+  -- """
+  --
+  -- Just :%s/ignoring CmdlineChanged/setting cmdline_changed_disabled etc.
+  vim.schedule(function()
+    cmdline_changed_disabled = false
+  end)
+end
+
 function M.setup(opts)
   opts = opts or {}
   for k, v in pairs(opts) do
@@ -227,50 +280,11 @@ function M.setup(opts)
 
   if user_opts.tab_completion then
     vim.keymap.set('c', '<Tab>', function()
-      if vim.tbl_isempty(current_completions) then
-        current_selection = 1
-        return
-      end
+      tab_completion(1)
+    end)
 
-      if current_selection == -1 then
-        -- TODO(smolck): This comment might not *quite* be accurate.
-        -- Means we just reset this back to the first completion from the CmdlineChanged autocmd
-        current_selection = 1
-      else
-        current_selection = current_selection + 1 > #current_completions and 1 or current_selection + 1
-      end
-
-      n.buf_clear_namespace(M.wbufnr, search_hl_nsid, 0, -1)
-      vim.highlight.range(
-        M.wbufnr,
-        search_hl_nsid,
-        'Search',
-        current_completions[current_selection].start,
-        current_completions[current_selection].finish,
-        {}
-      )
-      vim.cmd('redraw')
-
-      -- TODO(smolck): Re-visit this when/if https://github.com/neovim/neovim/pull/18096 is merged.
-      local cmdline = f.getcmdline()
-      local last_word_len = vim.split(cmdline, ' ')
-      last_word_len = string.len(last_word_len[#last_word_len])
-
-      cmdline_changed_disabled = true
-      vim.api.nvim_input(('<BS>'):rep(last_word_len) .. current_completions[current_selection].full_completion)
-
-      -- This is necessary, from @gpanders on matrix:
-      --
-      -- """
-      -- what's probably happening is you are ignoring CmdlineChanged, running your function, and then removing it before the event loop has a chance to turn
-      -- so you should instead ignore the event, run your callback, let the event loop turn, and then remove it
-      -- which is what vim.schedule is for
-      -- """
-      --
-      -- Just :%s/ignoring CmdlineChanged/setting cmdline_changed_disabled etc.
-      vim.schedule(function()
-        cmdline_changed_disabled = false
-      end)
+    vim.keymap.set('c', '<S-Tab>', function()
+      tab_completion(-1)
     end)
   end
 

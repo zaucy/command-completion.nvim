@@ -30,7 +30,6 @@ local user_opts = {
 
 local current_completions = {}
 local current_selection = 1
-local debounce_timer
 local cmdline_changed_disabled = false
 local in_that_cursed_cmdwin = false
 local enter_aucmd_id, leave_aucmd_id
@@ -70,7 +69,6 @@ local function open_and_setup_win(height)
 end
 
 local function setup_handlers()
-  debounce_timer = nil
   if in_that_cursed_cmdwin then
     return
   end
@@ -204,11 +202,11 @@ local function teardown_handlers()
     n.del_autocmd(M.cmdline_changed_autocmd)
     M.cmdline_changed_autocmd = nil
   end
-  if M.winid then -- TODO(smolck): Check if n.win_is_valid(M.winid)?
+  if M.winid then         -- TODO(smolck): Check if n.win_is_valid(M.winid)?
     if in_that_cursed_cmdwin then
       n.win_hide(M.winid) -- Idk but it works (EDIT: NOT REALLY this is probably quite bad, so prepare for breakge
-                          -- just gotta fix this upstream I guess by making cmdwin sane with float and stuff
-                          -- TODO(smolck): come back once you've hopefully done that upstream)
+      -- just gotta fix this upstream I guess by making cmdwin sane with float and stuff
+      -- TODO(smolck): come back once you've hopefully done that upstream)
     else
       n.win_close(M.winid, true)
     end
@@ -294,19 +292,14 @@ function M.setup(opts)
   enter_aucmd_id = n.create_autocmd({ 'CmdlineEnter' }, {
     callback = function()
       if vim.v.event.cmdtype == ':' then
-        debounce_timer = vim.defer_fn(setup_handlers, 100) -- TODO(smolck): Make this time configurable?
+        setup_handlers()
       end
     end,
   })
   leave_aucmd_id = n.create_autocmd({ 'CmdlineLeave' }, {
     callback = function()
       if vim.v.event.cmdtype == ':' then
-        if debounce_timer then
-          debounce_timer:stop()
-          debounce_timer = nil
-        else
-          teardown_handlers()
-        end
+        teardown_handlers()
       end
     end,
   })

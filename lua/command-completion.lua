@@ -319,19 +319,4 @@ function M.setup(opts)
   })
 end
 
--- TODO(smolck): I don't even know if this is necessary, honestly. Or if it works.
-function M.disable()
-  if enter_aucmd_id then
-    n.del_autocmd(enter_aucmd_id)
-    enter_aucmd_id = nil
-  end
-
-  if leave_aucmd_id then
-    n.del_autocmd(leave_aucmd_id)
-    leave_aucmd_id = nil
-  end
-
-  vim.keymap.del('c', '<Tab>')
-end
-
 return M

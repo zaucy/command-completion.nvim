@@ -145,8 +145,12 @@ local function set_desc_win(desc)
   n.buf_set_lines(M.desc_wbufnr, 0, -1, false, vim.split(desc, '\n'))
 end
 
+local function split_cmdline(cmdline)
+  return vim.split(cmdline, '[ .=]')
+end
+
 local function update_cmdline_desc(cmdline)
-  local input_split = vim.split(cmdline, ' ')
+  local input_split = split_cmdline(cmdline)
   local command_desc = nil
   local commands = vim.api.nvim_get_commands({})
   local command_name = vim.trim(input_split[1])
@@ -364,7 +368,7 @@ local function tab_completion(direction)
 
   -- TODO(smolck): Re-visit this when/if https://github.com/neovim/neovim/pull/18096 is merged.
   local cmdline = f.getcmdline()
-  local cmdline_parts = vim.split(cmdline, ' ')
+  local cmdline_parts = split_cmdline(cmdline)
   local last_word_len = string.len(cmdline_parts[#cmdline_parts])
   local completion = current_completions[current_selection].full_completion
 

@@ -28,11 +28,39 @@ local user_opts = {
   tab_completion = true,
 }
 
+-- there isn't an API for builtin command descriptions
+-- these are taken from :help
+local builtin_command_desc = {
+  quit = "Quit the current window",
+  q = "Quit the current window",
+  write = "Write the whole buffer to the current file",
+  w = "Write the whole buffer to the current file",
+  ["write!"] =
+  "Like \":write\", but forcefully write when 'readonly' is set or there is another reason why writing was refused",
+  ["w!"] =
+  "Like \":write\", but forcefully write when 'readonly' is set or there is another reason why writing was refused",
+  wq = "Write the current file and close the window",
+  ["wq!"] = "Write the current file and close the window",
+  wa = "Write all changed buffers",
+  wall = "Write all changed buffers",
+  ["wa!"] = "Write all changed buffers, even the ones that are readonly",
+  ["wall!"] = "Write all changed buffers, even the ones that are readonly",
+  wqa = "Write all changed buffers and exit Vim",
+  wqall = "Write all changed buffers and exit Vim",
+  qa = "Exit Vim, unless there are some buffers which have been changed",
+  qall = "Exit Vim, unless there are some buffers which have been changed",
+  quitall = "Exit Vim, unless there are some buffers which have been changed",
+  quita = "Exit Vim, unless there are some buffers which have been changed",
+  n = "Create a new window and start editing an empty file in it",
+  new = "Create a new window and start editing an empty file in it",
+  h = "Open a window and display the help file in read-only mode",
+  help = "Open a window and display the help file in read-only mode",
+}
+
 local current_completions = {}
 local current_selection = 1
 local cmdline_changed_disabled = false
 local in_that_cursed_cmdwin = false
-local enter_aucmd_id, leave_aucmd_id
 local search_hl_nsid = n.create_namespace('__ccs_hls_namespace_search___')
 local directory_hl_nsid = n.create_namespace('__ccs_hls_namespace_directory___')
 
@@ -68,6 +96,76 @@ local function open_and_setup_win(height)
   vim.cmd('redraw')
 end
 
+---@param desc string|nil
+local function set_desc_win(desc)
+  if desc == nil or #desc == 0 then
+    if M.desc_winid then
+      n.win_close(M.desc_winid, true)
+      M.desc_winid = nil
+    end
+    return
+  end
+
+  if not M.winid then
+    return
+  end
+
+  assert(type(desc) == "string")
+
+  if not M.desc_wbufnr then
+    M.desc_wbufnr = n.create_buf(false, true)
+  end
+
+  local completion_win_config = n.win_get_config(M.winid)
+  local desc_win_height = 1
+  local desc_win_config = {
+    relative = 'win',
+    win = M.winid,
+    style = 'minimal',
+    border = 'rounded',
+    width = #desc,
+    height = desc_win_height,
+    row = -desc_win_height - completion_win_config.height,
+    col = 0,
+  }
+
+  -- NOTE: I have no idea why this works
+  if completion_win_config.height == 1 then
+    desc_win_config.row = desc_win_config.row - 1;
+  end
+
+  if not M.desc_winid then
+    M.desc_winid = n.open_win(M.desc_wbufnr, false, desc_win_config)
+  else
+    n.win_set_config(M.desc_winid, desc_win_config)
+  end
+
+  -- clear
+  n.buf_set_lines(M.desc_wbufnr, 0, -1, true, {})
+  n.buf_set_lines(M.desc_wbufnr, 0, -1, false, vim.split(desc, '\n'))
+end
+
+local function update_cmdline_desc(cmdline)
+  local input_split = vim.split(cmdline, ' ')
+  local command_desc = nil
+  local commands = vim.api.nvim_get_commands({})
+  local command_name = vim.trim(input_split[1])
+  if vim.fn.has_key(commands, command_name) then
+    local command = commands[command_name]
+    if command ~= nil and vim.fn.has_key(command, "definition") then
+      command_desc = command["definition"]
+    end
+  end
+
+  if not command_desc then
+    if vim.fn.has_key(builtin_command_desc, command_name) then
+      command_desc = builtin_command_desc[command_name]
+    end
+  end
+
+  set_desc_win(command_desc)
+end
+
 local function setup_handlers()
   if in_that_cursed_cmdwin then
     return
@@ -84,7 +182,19 @@ local function setup_handlers()
   n.buf_set_lines(M.wbufnr, 0, height, false, tbl)
 
   local function autocmd_cb()
+    local input = vim.trim(f.getcmdline())
+
+    -- NOTE: shell autcomplete is very slow
+    if vim.startswith(input, '!') or vim.startswith(input, '\'') then
+      if not cmdline_changed_disabled then
+        n.win_close(M.winid, true)
+        M.winid = nil
+      end
+      return
+    end
+
     if cmdline_changed_disabled then
+      update_cmdline_desc(input)
       return
     end
 
@@ -92,28 +202,18 @@ local function setup_handlers()
       open_and_setup_win(height)
     end
 
+    local completions = f.getcompletion(input, 'cmdline')
+
     -- Clear window
     n.buf_set_lines(M.wbufnr, 0, height, false, tbl)
 
-    local input = vim.trim(f.getcmdline())
-
-    -- NOTE: shell autcomplete is very slow
-    if vim.startswith(input, '!') or vim.startswith(input, '\'') then
-      n.win_close(M.winid, true)
-      M.winid = nil
-      return
-    end
-
-    local completions = f.getcompletion(input, 'cmdline')
-
     -- TODO(smolck): No clue if this really helps much if at all but we'll use it
     -- by default for now
-    if user_opts.use_matchfuzzy and input ~= '' then
-      local split = vim.split(input, ' ')
-      local str_to_match = split[#split]
-
-      completions = vim.fn.matchfuzzy(completions, str_to_match)
-    end
+    -- if user_opts.use_matchfuzzy and input ~= '' then
+    --   local str_to_match = input_split[#input_split]
+    --
+    --   completions = vim.fn.matchfuzzy(completions, str_to_match)
+    -- end
 
     -- TODO(smolck): This *should* only apply to suggestions that are files, but
     -- I'm not totally sure if that's right so might need to be properly tested.
@@ -146,6 +246,10 @@ local function setup_handlers()
       n.win_close(M.winid, true)
       M.winid = nil
 
+      if M.desc_winid then
+        n.win_close(M.desc_winid, true)
+        M.desc_winid = nil
+      end
       return
     end
 
@@ -187,6 +291,8 @@ local function setup_handlers()
     end
     n.win_set_height(M.winid, math.min(math.floor(#completions / (math.floor(vim.o.columns / col_width))), height))
     vim.cmd('redraw')
+    update_cmdline_desc(input)
+    vim.cmd('redraw')
   end
 
   M.cmdline_changed_autocmd = n.create_autocmd({ 'CmdlineChanged' }, {
@@ -211,11 +317,18 @@ local function teardown_handlers()
       n.win_close(M.winid, true)
     end
   end
+  if M.desc_winid then
+    n.win_close(M.desc_winid, true)
+  end
   M.winid = nil
+  M.desc_winid = nil
   current_selection = 1
 
   if M.wbufnr then
     n.buf_set_lines(M.wbufnr, 0, -1, true, {})
+  end
+  if M.desc_wbufnr then
+    n.buf_set_lines(M.desc_wbufnr, 0, -1, true, {})
   end
 end
 
@@ -248,15 +361,18 @@ local function tab_completion(direction)
     current_completions[current_selection].finish,
     {}
   )
-  vim.cmd('redraw')
 
   -- TODO(smolck): Re-visit this when/if https://github.com/neovim/neovim/pull/18096 is merged.
   local cmdline = f.getcmdline()
-  local last_word_len = vim.split(cmdline, ' ')
-  last_word_len = string.len(last_word_len[#last_word_len])
+  local cmdline_parts = vim.split(cmdline, ' ')
+  local last_word_len = string.len(cmdline_parts[#cmdline_parts])
+  local completion = current_completions[current_selection].full_completion
 
   cmdline_changed_disabled = true
-  vim.api.nvim_input(('<BS>'):rep(last_word_len) .. current_completions[current_selection].full_completion)
+  local new_cmdline = cmdline:sub(0, #cmdline - last_word_len) .. completion
+  vim.fn.setcmdline(new_cmdline)
+  update_cmdline_desc(new_cmdline)
+  vim.cmd('redraw')
 
   -- This is necessary, from @gpanders on matrix:
   --

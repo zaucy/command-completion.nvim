@@ -1,22 +1,5 @@
 local M = {}
 
-local n = setmetatable({}, {
-  __index = function(_, k)
-    local maybe_thing = vim.api[k]
-    if maybe_thing == nil then
-      local thing_unless_typo = 'nvim_' .. k
-      local maybe_thing_unless_typo = vim.api[thing_unless_typo]
-      if maybe_thing_unless_typo == nil then
-        error(thing_unless_typo .. ' is not a valid vim.api function')
-      end
-
-      return maybe_thing_unless_typo
-    else
-      return maybe_thing
-    end
-  end,
-})
-
 local user_opts = {
   border = nil,
   max_col_num = 5,
@@ -60,8 +43,8 @@ local current_completions = {}
 local current_selection = 1
 local cmdline_changed_disabled = false
 local in_that_cursed_cmdwin = false
-local search_hl_nsid = n.create_namespace('__ccs_hls_namespace_search___')
-local directory_hl_nsid = n.create_namespace('__ccs_hls_namespace_directory___')
+local search_hl_nsid = vim.api.nvim_create_namespace('__ccs_hls_namespace_search___')
+local directory_hl_nsid = vim.api.nvim_create_namespace('__ccs_hls_namespace_directory___')
 
 local function calc_col_width()
   local col_width
@@ -79,10 +62,10 @@ end
 
 local function open_and_setup_win(height)
   if not M.wbufnr then
-    M.wbufnr = n.create_buf(false, true)
+    M.wbufnr = vim.api.nvim_create_buf(false, true)
   end
 
-  M.winid = n.open_win(M.wbufnr, false, {
+  M.winid = vim.api.nvim_open_win(M.wbufnr, false, {
     relative = 'editor',
     border = user_opts.border,
     style = 'minimal',
@@ -99,7 +82,7 @@ end
 local function set_desc_win(desc)
   if desc == nil or #desc == 0 then
     if M.desc_winid then
-      n.win_close(M.desc_winid, true)
+      vim.api.nvim_win_close(M.desc_winid, true)
       M.desc_winid = nil
     end
     return
@@ -112,10 +95,10 @@ local function set_desc_win(desc)
   assert(type(desc) == "string")
 
   if not M.desc_wbufnr then
-    M.desc_wbufnr = n.create_buf(false, true)
+    M.desc_wbufnr = vim.api.nvim_create_buf(false, true)
   end
 
-  local completion_win_config = n.win_get_config(M.winid)
+  local completion_win_config = vim.api.nvim_win_get_config(M.winid)
   local desc_win_height = 1
   local desc_win_config = {
     relative = 'win',
@@ -134,14 +117,14 @@ local function set_desc_win(desc)
   end
 
   if not M.desc_winid then
-    M.desc_winid = n.open_win(M.desc_wbufnr, false, desc_win_config)
+    M.desc_winid = vim.api.nvim_open_win(M.desc_wbufnr, false, desc_win_config)
   else
-    n.win_set_config(M.desc_winid, desc_win_config)
+    vim.api.nvim_win_set_config(M.desc_winid, desc_win_config)
   end
 
   -- clear
-  n.buf_set_lines(M.desc_wbufnr, 0, -1, true, {})
-  n.buf_set_lines(M.desc_wbufnr, 0, -1, false, vim.split(desc, '\n'))
+  vim.api.nvim_buf_set_lines(M.desc_wbufnr, 0, -1, true, {})
+  vim.api.nvim_buf_set_lines(M.desc_wbufnr, 0, -1, false, vim.split(desc, '\n'))
 end
 
 local function split_cmdline(cmdline)
@@ -182,7 +165,7 @@ local function setup_handlers()
   for _ = 0, height do
     tbl[#tbl + 1] = (' '):rep(vim.o.columns)
   end
-  n.buf_set_lines(M.wbufnr, 0, height, false, tbl)
+  vim.api.nvim_buf_set_lines(M.wbufnr, 0, height, false, tbl)
 
   local function autocmd_cb()
     local input = vim.trim(vim.fn.getcmdline())
@@ -190,7 +173,7 @@ local function setup_handlers()
     -- NOTE: shell autcomplete is very slow
     if vim.startswith(input, '!') or vim.startswith(input, '\'') then
       if not cmdline_changed_disabled and M.winid then
-        n.win_close(M.winid, true)
+        vim.api.nvim_win_close(M.winid, true)
         M.winid = nil
       end
       return
@@ -208,7 +191,7 @@ local function setup_handlers()
     local completions = vim.fn.getcompletion(input, 'cmdline')
 
     -- Clear window
-    n.buf_set_lines(M.wbufnr, 0, height, false, tbl)
+    vim.api.nvim_buf_set_lines(M.wbufnr, 0, height, false, tbl)
 
     -- TODO(smolck): No clue if this really helps much if at all but we'll use it
     -- by default for now
@@ -246,11 +229,11 @@ local function setup_handlers()
 
     -- Don't show completion window if there are no completions.
     if vim.tbl_isempty(completions) then
-      n.win_close(M.winid, true)
+      vim.api.nvim_win_close(M.winid, true)
       M.winid = nil
 
       if M.desc_winid then
-        n.win_close(M.desc_winid, true)
+        vim.api.nvim_win_close(M.desc_winid, true)
         M.desc_winid = nil
       end
       return
@@ -266,7 +249,7 @@ local function setup_handlers()
         if end_col > vim.o.columns then
           break
         end
-        n.buf_set_text(M.wbufnr, line, col * col_width, line, end_col, { completions[i].completion })
+        vim.api.nvim_buf_set_text(M.wbufnr, line, col * col_width, line, end_col, { completions[i].completion })
 
         current_completions[i] = {
           start = { line, col * col_width },
@@ -292,13 +275,14 @@ local function setup_handlers()
         i = i + 1
       end
     end
-    n.win_set_height(M.winid, math.min(math.floor(#completions / (math.floor(vim.o.columns / col_width))), height))
+    vim.api.nvim_win_set_height(M.winid,
+      math.min(math.floor(#completions / (math.floor(vim.o.columns / col_width))), height))
     vim.cmd('redraw')
     update_cmdline_desc(input)
     vim.cmd('redraw')
   end
 
-  M.cmdline_changed_autocmd = n.create_autocmd({ 'CmdlineChanged' }, {
+  M.cmdline_changed_autocmd = vim.api.nvim_create_autocmd({ 'CmdlineChanged' }, {
     callback = autocmd_cb,
   })
 
@@ -308,30 +292,30 @@ end
 
 local function teardown_handlers()
   if M.cmdline_changed_autocmd then
-    n.del_autocmd(M.cmdline_changed_autocmd)
+    vim.api.nvim_del_autocmd(M.cmdline_changed_autocmd)
     M.cmdline_changed_autocmd = nil
   end
-  if M.winid then         -- TODO(smolck): Check if n.win_is_valid(M.winid)?
+  if M.winid then                    -- TODO(smolck): Check if vim.api.nvim_win_is_valid(M.winid)?
     if in_that_cursed_cmdwin then
-      n.win_hide(M.winid) -- Idk but it works (EDIT: NOT REALLY this is probably quite bad, so prepare for breakge
+      vim.api.nvim_win_hide(M.winid) -- Idk but it works (EDIT: NOT REALLY this is probably quite bad, so prepare for breakge
       -- just gotta fix this upstream I guess by making cmdwin sane with float and stuff
       -- TODO(smolck): come back once you've hopefully done that upstream)
     else
-      n.win_close(M.winid, true)
+      vim.api.nvim_win_close(M.winid, true)
     end
   end
   if M.desc_winid then
-    n.win_close(M.desc_winid, true)
+    vim.api.nvim_win_close(M.desc_winid, true)
   end
   M.winid = nil
   M.desc_winid = nil
   current_selection = 1
 
   if M.wbufnr then
-    n.buf_set_lines(M.wbufnr, 0, -1, true, {})
+    vim.api.nvim_buf_set_lines(M.wbufnr, 0, -1, true, {})
   end
   if M.desc_wbufnr then
-    n.buf_set_lines(M.desc_wbufnr, 0, -1, true, {})
+    vim.api.nvim_buf_set_lines(M.desc_wbufnr, 0, -1, true, {})
   end
 end
 
@@ -355,7 +339,7 @@ local function tab_completion(direction)
     end
   end
 
-  n.buf_clear_namespace(M.wbufnr, search_hl_nsid, 0, -1)
+  vim.api.nvim_buf_clear_namespace(M.wbufnr, search_hl_nsid, 0, -1)
   vim.highlight.range(
     M.wbufnr,
     search_hl_nsid,
@@ -407,7 +391,7 @@ function M.setup(opts)
     end)
   end
 
-  n.create_autocmd({ 'CmdwinEnter' }, {
+  vim.api.nvim_create_autocmd({ 'CmdwinEnter' }, {
     callback = function()
       in_that_cursed_cmdwin = true
 
@@ -417,19 +401,19 @@ function M.setup(opts)
       end
     end,
   })
-  n.create_autocmd({ 'CmdwinLeave' }, {
+  vim.api.nvim_create_autocmd({ 'CmdwinLeave' }, {
     callback = function()
       in_that_cursed_cmdwin = false
     end,
   })
-  n.create_autocmd({ 'CmdlineEnter' }, {
+  vim.api.nvim_create_autocmd({ 'CmdlineEnter' }, {
     callback = function()
       if vim.v.event.cmdtype == ':' then
         setup_handlers()
       end
     end,
   })
-  n.create_autocmd({ 'CmdlineLeave' }, {
+  vim.api.nvim_create_autocmd({ 'CmdlineLeave' }, {
     callback = function()
       if vim.v.event.cmdtype == ':' then
         teardown_handlers()

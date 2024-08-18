@@ -48,16 +48,18 @@ local directory_hl_nsid = vim.api.nvim_create_namespace('__ccs_hls_namespace_dir
 
 local function calc_col_width()
   local col_width
+  local cols = 0
   for i = 1, user_opts.max_col_num do
     local test_width = math.floor(vim.o.columns / i)
+    cols = cols + 1
     if test_width <= user_opts.min_col_width then
-      return col_width
+      return col_width, cols
     else
       col_width = test_width
     end
   end
 
-  return col_width
+  return col_width, cols
 end
 
 local function open_and_setup_win(height)
@@ -71,7 +73,7 @@ local function open_and_setup_win(height)
     style = 'minimal',
     width = vim.o.columns,
     height = height,
-    row = vim.o.lines - 2,
+    row = vim.o.lines - 4,
     col = 0,
   })
 
@@ -158,7 +160,7 @@ local function setup_handlers()
   end
 
   local height = math.floor(vim.o.lines * 0.3)
-  local col_width = calc_col_width()
+  local col_width, cols = calc_col_width()
   open_and_setup_win(height)
 
   local tbl = {}
@@ -239,44 +241,55 @@ local function setup_handlers()
       return
     end
 
-    local i = 1
-    for line = 0, height - 1 do
-      for col = 0, math.floor(vim.o.columns / col_width) - 1 do
-        if i > #completions then
-          break
-        end
-        local end_col = col * col_width + string.len(completions[i].completion)
-        if end_col > vim.o.columns then
-          break
-        end
-        vim.api.nvim_buf_set_text(M.wbufnr, line, col * col_width, line, end_col, { completions[i].completion })
+    local new_height = math.min(height, math.ceil(#completions / (cols + 1)))
+    vim.api.nvim_win_set_config(M.winid, {
+      relative = 'editor',
+      border = user_opts.border,
+      style = 'minimal',
+      width = vim.o.columns,
+      height = new_height,
+      row = vim.o.lines - new_height - 1,
+      col = 0,
+    })
 
-        current_completions[i] = {
-          start = { line, col * col_width },
-          finish = { line, end_col },
-          full_completion = completions[i].full_completion,
-        }
+    local col = -1
+    for i, item in ipairs(completions) do
+      local line = (i - 1) % new_height
+      if line == 0 then
+        col = col + 1
+      end
+      local end_col = col * col_width + string.len(item.completion)
+      if end_col > vim.o.columns then
+        break
+      end
 
-        if i == current_selection and user_opts.highlight_selection then
-          vim.highlight.range(M.wbufnr, search_hl_nsid, 'Search', { line, col * col_width }, { line, end_col }, {})
-        end
+      vim.api.nvim_buf_set_text(
+        M.wbufnr, line, col * col_width, line, end_col,
+        { item.completion }
+      )
 
-        if completions[i].is_directory and user_opts.highlight_directories then
-          vim.highlight.range(
-            M.wbufnr,
-            directory_hl_nsid,
-            'Directory',
-            { line, col * col_width },
-            { line, end_col },
-            {}
-          )
-        end
+      current_completions[i] = {
+        start = { line, col * col_width },
+        finish = { line, end_col },
+        full_completion = completions[i].full_completion,
+      }
 
-        i = i + 1
+      if i == current_selection and user_opts.highlight_selection then
+        vim.highlight.range(M.wbufnr, search_hl_nsid, 'Search', { line, col * col_width }, { line, end_col }, {})
+      end
+
+      if completions[i].is_directory and user_opts.highlight_directories then
+        vim.highlight.range(
+          M.wbufnr,
+          directory_hl_nsid,
+          'Directory',
+          { line, col * col_width },
+          { line, end_col },
+          {}
+        )
       end
     end
-    vim.api.nvim_win_set_height(M.winid,
-      math.min(math.floor(#completions / (math.floor(vim.o.columns / col_width))), height))
+    vim.api.nvim_win_set_height(M.winid, new_height)
     vim.cmd('redraw')
     update_cmdline_desc(input)
     vim.cmd('redraw')

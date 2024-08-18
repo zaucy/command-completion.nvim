@@ -170,7 +170,7 @@ local function setup_handlers()
   vim.api.nvim_buf_set_lines(M.wbufnr, 0, height, false, tbl)
 
   local function autocmd_cb()
-    local input = vim.trim(vim.fn.getcmdline())
+    local input = vim.fn.getcmdline()
 
     -- NOTE: shell autcomplete is very slow
     if vim.startswith(input, '!') or vim.startswith(input, '\'') then
@@ -332,6 +332,9 @@ local function teardown_handlers()
   end
 end
 
+local previewing_colorscheme = false
+local before_preview_colorscheme = ""
+
 local function tab_completion(direction)
   if vim.tbl_isempty(current_completions) then
     current_selection = 1
@@ -372,6 +375,15 @@ local function tab_completion(direction)
   local new_cmdline = cmdline:sub(0, #cmdline - last_word_len) .. completion
   vim.fn.setcmdline(new_cmdline)
   update_cmdline_desc(new_cmdline)
+
+  if vim.startswith(cmdline, "colorscheme ") then
+    if not previewing_colorscheme then
+      previewing_colorscheme = true
+      before_preview_colorscheme = vim.g.colors_name
+    end
+    vim.cmd(new_cmdline)
+  end
+
   vim.cmd('redraw')
 
   -- This is necessary, from @gpanders on matrix:
@@ -429,6 +441,11 @@ function M.setup(opts)
   vim.api.nvim_create_autocmd({ 'CmdlineLeave' }, {
     callback = function()
       if vim.v.event.cmdtype == ':' then
+        if vim.v.event.abort then
+          vim.cmd("colorscheme " .. before_preview_colorscheme)
+        end
+        previewing_colorscheme = false
+        before_preview_colorscheme = ""
         teardown_handlers()
       end
     end,

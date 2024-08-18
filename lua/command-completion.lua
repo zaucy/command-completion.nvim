@@ -423,14 +423,14 @@ function M.setup(opts)
       in_that_cursed_cmdwin = false
     end,
   })
-  enter_aucmd_id = n.create_autocmd({ 'CmdlineEnter' }, {
+  n.create_autocmd({ 'CmdlineEnter' }, {
     callback = function()
       if vim.v.event.cmdtype == ':' then
         setup_handlers()
       end
     end,
   })
-  leave_aucmd_id = n.create_autocmd({ 'CmdlineLeave' }, {
+  n.create_autocmd({ 'CmdlineLeave' }, {
     callback = function()
       if vim.v.event.cmdtype == ':' then
         teardown_handlers()

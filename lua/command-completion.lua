@@ -1,5 +1,4 @@
 local M = {}
-local f = vim.fn
 
 local n = setmetatable({}, {
   __index = function(_, k)
@@ -186,7 +185,7 @@ local function setup_handlers()
   n.buf_set_lines(M.wbufnr, 0, height, false, tbl)
 
   local function autocmd_cb()
-    local input = vim.trim(f.getcmdline())
+    local input = vim.trim(vim.fn.getcmdline())
 
     -- NOTE: shell autcomplete is very slow
     if vim.startswith(input, '!') or vim.startswith(input, '\'') then
@@ -206,7 +205,7 @@ local function setup_handlers()
       open_and_setup_win(height)
     end
 
-    local completions = f.getcompletion(input, 'cmdline')
+    local completions = vim.fn.getcompletion(input, 'cmdline')
 
     -- Clear window
     n.buf_set_lines(M.wbufnr, 0, height, false, tbl)
@@ -223,14 +222,14 @@ local function setup_handlers()
     -- I'm not totally sure if that's right so might need to be properly tested.
     -- (Or maybe find a better way of cutting down filepath suggestions to their tails?)
     completions = vim.tbl_map(function(c)
-      local is_directory = vim.fn.isdirectory(f.fnamemodify(c, ':p')) == 1
-      local f1 = f.fnamemodify(c, ':p:t')
+      local is_directory = vim.fn.isdirectory(vim.fn.fnamemodify(c, ':p')) == 1
+      local f1 = vim.fn.fnamemodify(c, ':p:t')
 
       local ret
       if f1 == '' then
         -- This is for filepaths like '/Users/someuser/thing/', where if you get
         -- the tail it's just empty.
-        ret = f.fnamemodify(c, ':p:h:t')
+        ret = vim.fn.fnamemodify(c, ':p:h:t')
       else
         ret = f1
       end
@@ -367,7 +366,7 @@ local function tab_completion(direction)
   )
 
   -- TODO(smolck): Re-visit this when/if https://github.com/neovim/neovim/pull/18096 is merged.
-  local cmdline = f.getcmdline()
+  local cmdline = vim.fn.getcmdline()
   local cmdline_parts = split_cmdline(cmdline)
   local last_word_len = string.len(cmdline_parts[#cmdline_parts])
   local completion = current_completions[current_selection].full_completion

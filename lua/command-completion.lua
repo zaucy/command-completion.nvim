@@ -186,7 +186,7 @@ local function setup_handlers()
 
     -- NOTE: shell autcomplete is very slow
     if vim.startswith(input, '!') or vim.startswith(input, '\'') then
-      if not cmdline_changed_disabled then
+      if not cmdline_changed_disabled and M.winid then
         n.win_close(M.winid, true)
         M.winid = nil
       end

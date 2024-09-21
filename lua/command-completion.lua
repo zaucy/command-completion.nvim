@@ -8,6 +8,13 @@ local user_opts = {
   highlight_selection = true,
   highlight_directories = true,
   tab_completion = true,
+  filter_completion = function(input)
+    -- NOTE: shell autcomplete is very slow
+    if vim.startswith(input, '!') or vim.startswith(input, '\'') then
+      return false
+    end
+    return true
+  end,
 }
 
 -- there isn't an API for builtin command descriptions
@@ -172,8 +179,7 @@ local function setup_handlers()
   local function autocmd_cb()
     local input = vim.fn.getcmdline()
 
-    -- NOTE: shell autcomplete is very slow
-    if vim.startswith(input, '!') or vim.startswith(input, '\'') then
+    if user_opts.filter_completion(input) then
       if not cmdline_changed_disabled and M.winid then
         vim.api.nvim_win_close(M.winid, true)
         M.winid = nil

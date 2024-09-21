@@ -179,7 +179,7 @@ local function setup_handlers()
   local function autocmd_cb()
     local input = vim.fn.getcmdline()
 
-    if user_opts.filter_completion(input) then
+    if not user_opts.filter_completion(input) then
       if not cmdline_changed_disabled and M.winid then
         vim.api.nvim_win_close(M.winid, true)
         M.winid = nil
